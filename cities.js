@@ -80,7 +80,18 @@ const cities = [
   { id: "577", name: "VAN" },
   { id: "578", name: "YALOVA" },
   { id: "579", name: "YOZGAT" },
-  { id: "580", name: "ZONGULDAK" }
+  { id: "580", name: "ZONGULDAK" },
+  
+  // Bolu İlçeleri
+  { id: "9315", name: "BOLU" },
+  { id: "9316", name: "DÖRTDIVAN" },
+  { id: "9317", name: "GEREDE" },
+  { id: "9318", name: "GÖYNÜK" },
+  { id: "9319", name: "KIBRISCIK" },
+  { id: "9320", name: "MENGEN" },
+  { id: "9321", name: "MUDURNU" },
+  { id: "9322", name: "SEBEN" },
+  { id: "9323", name: "YENİÇAĞA" }
 ];
 
 module.exports = cities;
