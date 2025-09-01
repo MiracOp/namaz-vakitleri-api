@@ -6,7 +6,7 @@ const cities = [
   { id: "503", name: "AĞRI" },
   { id: "504", name: "AKSARAY" },
   { id: "505", name: "AMASYA" },
-  { id: "506", name: "ANKARA" },
+  { id: "9206", name: "ANKARA" },
   { id: "507", name: "ANTALYA" },
   { id: "508", name: "ARDAHAN" },
   { id: "509", name: "ARTVİN" },
