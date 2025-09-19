@@ -313,6 +313,99 @@ app.get('/prayer-times/:city/:date', async (req, res) => {
   }
 });
 
+// Tüm şehirlerin namaz vakitlerini getir
+app.get('/all-prayer-times', async (req, res) => {
+  try {
+    const allResults = [];
+    const cities = require('./cities');
+    
+    // Ana şehirler için paralel istek (sadece ilk 10 şehir performans için)
+    const majorCities = cities.slice(0, 10);
+    
+    const promises = majorCities.map(async (city) => {
+      try {
+        const targetUrl = buildDiyanetUrl(city.id);
+        if (targetUrl === 'AUTO_DETECT') {
+          return null; // Skip auto-detect for bulk request
+        }
+        
+        const response = await fetchWithRetry(targetUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; NamazVakitleriAPI/1.0; +https://github.com)'
+          },
+          timeout: 10000
+        });
+        
+        const $ = cheerio.load(response.data);
+        const scriptContent = $('script').filter((i, elem) => {
+          return $(elem).html().includes('var _imsakTime');
+        }).html();
+        
+        const prayerTimes = {};
+        let cityName = city.name;
+        
+        if (scriptContent) {
+          const imsakMatch = scriptContent.match(/var _imsakTime = "([^"]+)"/);
+          const gunesMatch = scriptContent.match(/var _gunesTime = "([^"]+)"/);
+          const ogleMatch = scriptContent.match(/var _ogleTime = "([^"]+)"/);
+          const ikindiMatch = scriptContent.match(/var _ikindiTime = "([^"]+)"/);
+          const aksamMatch = scriptContent.match(/var _aksamTime = "([^"]+)"/);
+          const yatsiMatch = scriptContent.match(/var _yatsiTime = "([^"]+)"/);
+          
+          const cityMatch = scriptContent.match(/var srSehirAdi = "([^"]+)"/);
+          if (cityMatch) cityName = cityMatch[1];
+          
+          if (imsakMatch) prayerTimes.imsak = imsakMatch[1];
+          if (gunesMatch) prayerTimes.gunes = gunesMatch[1];
+          if (ogleMatch) prayerTimes.ogle = ogleMatch[1];
+          if (ikindiMatch) prayerTimes.ikindi = ikindiMatch[1];
+          if (aksamMatch) prayerTimes.aksam = aksamMatch[1];
+          if (yatsiMatch) prayerTimes.yatsi = yatsiMatch[1];
+        }
+        
+        return {
+          id: city.id,
+          city: cityName,
+          prayerTimes: prayerTimes,
+          success: Object.keys(prayerTimes).length > 0
+        };
+        
+      } catch (error) {
+        return {
+          id: city.id,
+          city: city.name,
+          success: false,
+          error: error.message
+        };
+      }
+    });
+    
+    const results = await Promise.all(promises);
+    const successfulResults = results.filter(r => r && r.success);
+    const failedResults = results.filter(r => r && !r.success);
+    
+    res.json({
+      success: true,
+      totalCities: majorCities.length,
+      successfulCities: successfulResults.length,
+      failedCities: failedResults.length,
+      date: new Date().toLocaleDateString('tr-TR'),
+      cities: successfulResults,
+      failures: failedResults,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('Toplu namaz vakitleri alınırken hata:', error.message);
+    res.status(500).json({
+      success: false,
+      message: 'Toplu namaz vakitleri alınamadı',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
