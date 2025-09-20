@@ -428,6 +428,7 @@ app.listen(PORT, () => {
   console.log(`🚀 Namaz Vakitleri API ${PORT} portunda çalışıyor`);
   console.log(`📱 Mobil uygulamanız için hazır!`);
   console.log(`🌐 http://localhost:${PORT}`);
+  console.log(`🔄 All prayer times endpoint: /all-prayer-times`);
 });
 
 module.exports = app;
