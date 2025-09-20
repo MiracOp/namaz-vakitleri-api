@@ -406,6 +406,132 @@ app.get('/all-prayer-times', async (req, res) => {
   }
 });
 
+// Konum bazlı en yakın şehir bulma
+app.get('/prayer-times-by-location', async (req, res) => {
+  try {
+    const { lat, lng } = req.query;
+    
+    if (!lat || !lng) {
+      return res.status(400).json({
+        success: false,
+        message: 'Latitude (lat) ve longitude (lng) parametreleri gerekli'
+      });
+    }
+    
+    const latitude = parseFloat(lat);
+    const longitude = parseFloat(lng);
+    
+    // Türkiye'nin büyük şehirlerinin koordinatları
+    const cityCoordinates = {
+      'istanbul': { lat: 41.0082, lng: 28.9784 },
+      'ankara': { lat: 39.9334, lng: 32.8597 },
+      'izmir': { lat: 38.4192, lng: 27.1287 },
+      'bursa': { lat: 40.1826, lng: 29.0669 },
+      'antalya': { lat: 36.8841, lng: 30.7056 },
+      'adana': { lat: 37.0000, lng: 35.3213 },
+      'gaziantep': { lat: 37.0662, lng: 37.3833 },
+      'konya': { lat: 37.8713, lng: 32.4846 },
+      'mersin': { lat: 36.8000, lng: 34.6333 },
+      'kayseri': { lat: 38.7312, lng: 35.4787 }
+    };
+    
+    // En yakın şehri bul (Haversine formula)
+    let closestCity = 'istanbul';
+    let minDistance = Infinity;
+    
+    for (const [cityName, coords] of Object.entries(cityCoordinates)) {
+      const distance = getDistanceFromLatLonInKm(
+        latitude, longitude, coords.lat, coords.lng
+      );
+      
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestCity = cityName;
+      }
+    }
+    
+    // En yakın şehrin namaz vakitlerini getir
+    const targetUrl = buildDiyanetUrl(closestCity);
+    if (targetUrl === 'AUTO_DETECT') {
+      return res.status(404).json({
+        success: false,
+        message: `${closestCity} için namaz vakitleri bulunamadı`
+      });
+    }
+    
+    const response = await fetchWithRetry(targetUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; NamazVakitleriAPI/1.0; +https://github.com)'
+      },
+      timeout: 15000
+    });
+    
+    const $ = cheerio.load(response.data);
+    const scriptContent = $('script').filter((i, elem) => {
+      return $(elem).html().includes('var _imsakTime');
+    }).html();
+    
+    const prayerTimes = {};
+    let cityName = closestCity.toUpperCase();
+    let date = new Date().toLocaleDateString('tr-TR');
+    
+    if (scriptContent) {
+      const imsakMatch = scriptContent.match(/var _imsakTime = "([^"]+)"/);
+      const gunesMatch = scriptContent.match(/var _gunesTime = "([^"]+)"/);
+      const ogleMatch = scriptContent.match(/var _ogleTime = "([^"]+)"/);
+      const ikindiMatch = scriptContent.match(/var _ikindiTime = "([^"]+)"/);
+      const aksamMatch = scriptContent.match(/var _aksamTime = "([^"]+)"/);
+      const yatsiMatch = scriptContent.match(/var _yatsiTime = "([^"]+)"/);
+      
+      const cityMatch = scriptContent.match(/var srSehirAdi = "([^"]+)"/);
+      if (cityMatch) cityName = cityMatch[1];
+      
+      if (imsakMatch) prayerTimes.imsak = imsakMatch[1];
+      if (gunesMatch) prayerTimes.gunes = gunesMatch[1];
+      if (ogleMatch) prayerTimes.ogle = ogleMatch[1];
+      if (ikindiMatch) prayerTimes.ikindi = ikindiMatch[1];
+      if (aksamMatch) prayerTimes.aksam = aksamMatch[1];
+      if (yatsiMatch) prayerTimes.yatsi = yatsiMatch[1];
+    }
+    
+    res.json({
+      success: true,
+      city: cityName,
+      closestCity: closestCity,
+      distance: Math.round(minDistance),
+      coordinates: { lat: latitude, lng: longitude },
+      date: date,
+      prayerTimes: prayerTimes,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('Konum bazlı namaz vakitleri alınırken hata:', error.message);
+    res.status(500).json({
+      success: false,
+      message: 'Konum bazlı namaz vakitleri alınamadı',
+      error: error.message
+    });
+  }
+});
+
+function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
+  const R = 6371; // Earth's radius in km
+  const dLat = deg2rad(lat2 - lat1);
+  const dLon = deg2rad(lon2 - lon1);
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  const d = R * c;
+  return d;
+}
+
+function deg2rad(deg) {
+  return deg * (Math.PI/180);
+}
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
