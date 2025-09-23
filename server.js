@@ -5,6 +5,25 @@ const cors = require('cors');
 const cities = require('./cities');
 require('dotenv').config();
 
+// Cache sistemi - 30 dakika cache
+const cache = new Map();
+const CACHE_DURATION = 30 * 60 * 1000; // 30 dakika
+
+function getCachedData(key) {
+  const cached = cache.get(key);
+  if (cached && (Date.now() - cached.timestamp) < CACHE_DURATION) {
+    return cached.data;
+  }
+  return null;
+}
+
+function setCachedData(key, data) {
+  cache.set(key, {
+    data: data,
+    timestamp: Date.now()
+  });
+}
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -154,8 +173,16 @@ app.get('/cities', async (req, res) => {
 
 // Namaz vakitleri endpoint'i
 app.get('/prayer-times/:city', async (req, res) => {
-  const { city } = req.params;
-  let targetUrl = buildDiyanetUrl(city);
+  const city = req.params.city.toLowerCase();
+  
+  // Cache kontrolü
+  const cacheKey = `prayer-times-${city}`;
+  const cachedResult = getCachedData(cacheKey);
+  if (cachedResult) {
+    return res.json(cachedResult);
+  }
+
+  let targetUrl;
   
   // Otomatik detection gerekiyorsa
   if (targetUrl === 'AUTO_DETECT') {
@@ -188,7 +215,7 @@ app.get('/prayer-times/:city', async (req, res) => {
       headers: {
         'User-Agent': 'Mozilla/5.0 (compatible; NamazVakitleriAPI/1.0; +https://github.com)'
       },
-      timeout: 15000
+      timeout: 8000
     });
     const $ = cheerio.load(response.data);    // JavaScript'ten namaz vakitlerini çıkar
     const scriptContent = $('script').filter((i, elem) => {
@@ -241,13 +268,18 @@ app.get('/prayer-times/:city', async (req, res) => {
     const dateElement = $('.ti-miladi').text().trim();
     if (dateElement) date = dateElement;
 
-    res.json({
+    const result = {
       success: true,
       city: cityName,
       date: date,
       prayerTimes: prayerTimes,
       timestamp: new Date().toISOString()
-    });
+    };
+
+    // Cache'e kaydet
+    setCachedData(cacheKey, result);
+    
+    res.json(result);
     
   } catch (error) {
     console.error('Namaz vakitleri alınırken hata:', error.message);
