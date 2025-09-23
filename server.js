@@ -24,6 +24,265 @@ function setCachedData(key, data) {
   });
 }
 
+// Otomatik IP bazlı konum tespiti - Kullanıcının IP'sinden şehrini tespit eder
+app.get('/prayer-times-auto', async (req, res) => {
+  try {
+    // Kullanıcının IP adresini al
+    const userIP = req.headers['x-forwarded-for'] || 
+                   req.headers['x-real-ip'] || 
+                   req.connection.remoteAddress || 
+                   req.socket.remoteAddress ||
+                   (req.connection.socket ? req.connection.socket.remoteAddress : null) ||
+                   req.ip;
+
+    let finalIP = userIP;
+    if (finalIP && finalIP.includes(',')) {
+      finalIP = finalIP.split(',')[0].trim();
+    }
+    if (finalIP && finalIP.startsWith('::ffff:')) {
+      finalIP = finalIP.substring(7);
+    }
+
+    console.log('🔍 Tespit edilen IP:', finalIP);
+
+    // Varsayılan olarak İstanbul
+    let targetCity = 'istanbul';
+    let detectionMethod = 'fallback';
+    let locationInfo = null;
+
+    // Localhost ve özel IP'ler için geolocation yapmayı atla
+    if (finalIP && 
+        finalIP !== '127.0.0.1' && 
+        finalIP !== 'localhost' && 
+        finalIP !== '::1' &&
+        !finalIP.startsWith('192.168.') &&
+        !finalIP.startsWith('10.') &&
+        !finalIP.startsWith('172.')) {
+      
+      try {
+        // ipapi.co ile geolocation (ücretsiz: günde 1000 istek)
+        console.log('🌍 IP Geolocation başlatılıyor...');
+        const geoResponse = await axios.get(`https://ipapi.co/${finalIP}/json/`, {
+          timeout: 3000,
+          headers: {
+            'User-Agent': 'Namaz-Vakitleri-API/1.0'
+          }
+        });
+
+        if (geoResponse.data && geoResponse.data.country_code === 'TR') {
+          const cityName = geoResponse.data.city;
+          locationInfo = {
+            city: cityName,
+            region: geoResponse.data.region,
+            country: geoResponse.data.country_name,
+            latitude: geoResponse.data.latitude,
+            longitude: geoResponse.data.longitude
+          };
+
+          console.log('📍 Tespit edilen konum:', locationInfo);
+
+          // Türk şehri eşleştirmeyi dene
+          if (cityName) {
+            const normalizedCityName = cityName.toLowerCase()
+              .replace('i̇', 'i')
+              .replace('ş', 's')
+              .replace('ç', 'c')
+              .replace('ğ', 'g')
+              .replace('ü', 'u')
+              .replace('ö', 'o');
+
+            // Şehir eşleştirme logic'i
+            const cityMappings = {
+              'istanbul': 'istanbul',
+              'ankara': 'ankara', 
+              'izmir': 'izmir',
+              'bursa': 'bursa',
+              'antalya': 'antalya',
+              'adana': 'adana',
+              'gaziantep': 'gaziantep',
+              'konya': 'konya',
+              'mersin': 'mersin',
+              'kayseri': 'kayseri'
+            };
+
+            if (cityMappings[normalizedCityName]) {
+              targetCity = cityMappings[normalizedCityName];
+              detectionMethod = 'ip_geolocation';
+              console.log(`✅ Şehir eşleşti: ${targetCity}`);
+            }
+          }
+        } else {
+          console.log('🌍 Türkiye dışından bağlantı, İstanbul varsayılan');
+        }
+      } catch (geoError) {
+        console.log('❌ Geolocation hatası:', geoError.message);
+        // İstanbul ile devam et
+      }
+    } else {
+      console.log('🏠 Yerel IP tespit edildi, İstanbul varsayılan');
+    }
+
+    // Cache kontrolü
+    const cacheKey = `prayer-times-${targetCity}`;
+    const cachedData = getCachedData(cacheKey);
+    
+    if (cachedData) {
+      return res.json({
+        success: true,
+        city: targetCity,
+        source: 'cache',
+        detection: {
+          method: detectionMethod,
+          ip: finalIP,
+          location: locationInfo
+        },
+        ...cachedData.prayerTimes ? cachedData : { prayerTimes: cachedData }
+      });
+    }
+
+    // Namaz vakitlerini getir
+    const targetUrl = buildDiyanetUrl(targetCity);
+    if (targetUrl === 'AUTO_DETECT') {
+      throw new Error(`${targetCity} için URL bulunamadı`);
+    }
+
+    const response = await fetchWithRetry(targetUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; NamazVakitleriAPI/1.0; +https://github.com)'
+      },
+      timeout: 8000
+    });
+    
+    const $ = cheerio.load(response.data);
+    const scriptContent = $('script').filter((i, elem) => {
+      return $(elem).html().includes('var _imsakTime');
+    }).html();
+    
+    const prayerTimes = {};
+    let cityName = targetCity.toUpperCase();
+    let date = new Date().toLocaleDateString('tr-TR');
+    
+    if (scriptContent) {
+      const imsakMatch = scriptContent.match(/var _imsakTime = "([^"]+)"/);
+      const gunesMatch = scriptContent.match(/var _gunesTime = "([^"]+)"/);
+      const ogleMatch = scriptContent.match(/var _ogleTime = "([^"]+)"/);
+      const ikindiMatch = scriptContent.match(/var _ikindiTime = "([^"]+)"/);
+      const aksamMatch = scriptContent.match(/var _aksamTime = "([^"]+)"/);
+      const yatsiMatch = scriptContent.match(/var _yatsiTime = "([^"]+)"/);
+      
+      const cityMatch = scriptContent.match(/var srSehirAdi = "([^"]+)"/);
+      if (cityMatch) cityName = cityMatch[1];
+      
+      if (imsakMatch) prayerTimes.imsak = imsakMatch[1];
+      if (gunesMatch) prayerTimes.gunes = gunesMatch[1];
+      if (ogleMatch) prayerTimes.ogle = ogleMatch[1];
+      if (ikindiMatch) prayerTimes.ikindi = ikindiMatch[1];
+      if (aksamMatch) prayerTimes.aksam = aksamMatch[1];
+      if (yatsiMatch) prayerTimes.yatsi = yatsiMatch[1];
+    }
+
+    const result = {
+      success: true,
+      city: cityName,
+      date: date,
+      prayerTimes: prayerTimes,
+      detection: {
+        method: detectionMethod,
+        ip: finalIP,
+        location: locationInfo
+      },
+      timestamp: new Date().toISOString()
+    };
+    
+    setCachedData(cacheKey, result);
+    
+    res.json(result);
+
+  } catch (error) {
+    console.error('❌ Otomatik konum namaz vakitleri hatası:', error.message);
+    
+    // Son çare: İstanbul'dan cache'li veri
+    try {
+      const cacheKey = 'prayer-times-istanbul';
+      const cachedData = getCachedData(cacheKey);
+      
+      if (cachedData) {
+        return res.json({
+          success: true,
+          city: 'İstanbul',
+          source: 'cache_fallback',
+          detection: {
+            method: 'error_fallback',
+            error: error.message
+          },
+          ...cachedData.prayerTimes ? cachedData : { prayerTimes: cachedData }
+        });
+      }
+
+      // Fresh İstanbul verisi
+      const targetUrl = buildDiyanetUrl('istanbul');
+      const response = await fetchWithRetry(targetUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; NamazVakitleriAPI/1.0; +https://github.com)'
+        },
+        timeout: 8000
+      });
+      
+      const $ = cheerio.load(response.data);
+      const scriptContent = $('script').filter((i, elem) => {
+        return $(elem).html().includes('var _imsakTime');
+      }).html();
+      
+      const prayerTimes = {};
+      if (scriptContent) {
+        const imsakMatch = scriptContent.match(/var _imsakTime = "([^"]+)"/);
+        const gunesMatch = scriptContent.match(/var _gunesTime = "([^"]+)"/);
+        const ogleMatch = scriptContent.match(/var _ogleTime = "([^"]+)"/);
+        const ikindiMatch = scriptContent.match(/var _ikindiTime = "([^"]+)"/);
+        const aksamMatch = scriptContent.match(/var _aksamTime = "([^"]+)"/);
+        const yatsiMatch = scriptContent.match(/var _yatsiTime = "([^"]+)"/);
+        
+        if (imsakMatch) prayerTimes.imsak = imsakMatch[1];
+        if (gunesMatch) prayerTimes.gunes = gunesMatch[1];
+        if (ogleMatch) prayerTimes.ogle = ogleMatch[1];
+        if (ikindiMatch) prayerTimes.ikindi = ikindiMatch[1];
+        if (aksamMatch) prayerTimes.aksam = aksamMatch[1];
+        if (yatsiMatch) prayerTimes.yatsi = yatsiMatch[1];
+      }
+      
+      const fallbackResult = {
+        success: true,
+        city: 'İstanbul',
+        date: new Date().toLocaleDateString('tr-TR'),
+        prayerTimes: prayerTimes,
+        detection: {
+          method: 'error_fallback',
+          error: error.message
+        },
+        timestamp: new Date().toISOString()
+      };
+      
+      setCachedData(cacheKey, fallbackResult);
+      res.json(fallbackResult);
+      
+    } catch (fallbackError) {
+      res.status(500).json({ 
+        success: false,
+        message: 'Namaz vakitleri servisi geçici olarak kullanılamıyor',
+        error: 'Tekrar deneyin'
+      });
+    }
+  }
+});
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: 'Endpoint bulunamadı'
+  });
+});
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
