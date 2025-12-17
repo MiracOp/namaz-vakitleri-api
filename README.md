@@ -1,94 +1,185 @@
-# Namaz Vakitleri API 🕌
+# 🕌 Namaz Vakitleri API# Namaz Vakitleri API 🕌
 
-Diyanet İşleri Başkanlığı'nın resmi sitesinden namaz vakitlerini çeken RESTful API.
 
-## Özellikler ✨
 
-- 🌍 Tüm Türkiye şehirleri için namaz vakitleri
-- 📅 Günlük ve tarihsel veri desteği  
-- 📱 Mobil uygulama entegrasyonu için optimize
+Diyanet İşleri Başkanlığı verilerini kullanarak namaz vakitlerini sağlayan RESTful API.Diyanet İşleri Başkanlığı'nın resmi sitesinden namaz vakitlerini çeken RESTful API.
+
+
+
+## 🚀 Hızlı Başlangıç## Özellikler ✨
+
+
+
+```bash- 🌍 Tüm Türkiye şehirleri için namaz vakitleri
+
+# Dependencies yükle- 📅 Günlük ve tarihsel veri desteği  
+
+npm install- 📱 Mobil uygulama entegrasyonu için optimize
+
 - 🚀 Hızlı ve güvenilir
-- 🔄 Real-time veri çekme
+
+# API'yi başlat- 🔄 Real-time veri çekme
+
+npm start
 
 ## Kurulum 🔧
 
-```bash
+# API çalışır: http://localhost:3001
+
+``````bash
+
 # Repoyu klonla
-git clone <repo-url>
+
+## 📋 Özelliklergit clone <repo-url>
+
 cd namaz-vakitleri-api
 
-# Bağımlılıkları yükle
-npm install
+- ✅ **İstanbul namaz vakitleri** - Güncel ve doğru veriler
 
-# Geliştirme modunda çalıştır
+- ✅ **Şehir desteği** - İstanbul, Ankara, İzmir# Bağımlılıkları yükle
+
+- ✅ **Cache sistemi** - 30 dakika cache ile hızlı yanıtnpm install
+
+- ✅ **RESTful API** - Kolay entegrasyon
+
+- ✅ **CORS destekli** - Frontend uygulamalarla çalışır# Geliştirme modunda çalıştır
+
 npm run dev
 
+## 🔗 API Endpoints
+
 # Veya production modunda
-npm start
-```
 
-## API Endpoints 📡
+### 📍 İstanbul Namaz Vakitlerinpm start
 
-### 1. Ana Bilgi
-```
-GET /
-```
-API hakkında genel bilgi döndürür.
+```bash```
 
-### 2. Şehir Listesi
-```
-GET /cities
-```
-Mevcut tüm şehirleri ve ID'lerini döndürür.
+GET /prayer-times/istanbul
 
-**Örnek Response:**
-```json
-{
-  "success": true,
-  "cities": [
-    {"id": "9146", "name": "İstanbul"},
+```## API Endpoints 📡
+
+
+
+**Örnek Yanıt:**### 1. Ana Bilgi
+
+```json```
+
+{GET /
+
+  "success": true,```
+
+  "city": "İSTANBUL",API hakkında genel bilgi döndürür.
+
+  "date": "6 Kasım 2025 Perşembe",
+
+  "prayerTimes": {### 2. Şehir Listesi
+
+    "imsak": "06:07",```
+
+    "gunes": "07:34",GET /cities
+
+    "ogle": "12:53",```
+
+    "ikindi": "15:36",Mevcut tüm şehirleri ve ID'lerini döndürür.
+
+    "aksam": "18:02",
+
+    "yatsi": "19:23"**Örnek Response:**
+
+  },```json
+
+  "source": "diyanet_html",{
+
+  "timestamp": "2025-11-06T13:33:15.000Z"  "success": true,
+
+}  "cities": [
+
+```    {"id": "9146", "name": "İstanbul"},
+
     {"id": "9559", "name": "Ankara"},
-    {"id": "9152", "name": "İzmir"}
-  ]
-}
+
+### 🏙️ Şehir Listesi    {"id": "9152", "name": "İzmir"}
+
+```bash  ]
+
+GET /cities}
+
+``````
+
+
+
+### ❤️ Sağlık Kontrolü### 3. Günlük Namaz Vakitleri
+
+```bash```
+
+GET /healthGET /prayer-times/:city
+
+``````
+
+
+
+## 💻 Kullanım Örnekleri**Örnek:**
+
 ```
 
-### 3. Günlük Namaz Vakitleri
-```
-GET /prayer-times/:city
-```
+### JavaScriptGET /prayer-times/9146
 
-**Örnek:**
-```
-GET /prayer-times/9146
-```
+```javascript```
 
-**Response:**
-```json
-{
+fetch('http://localhost:3001/prayer-times/istanbul')
+
+  .then(res => res.json())**Response:**
+
+  .then(data => console.log(data.prayerTimes));```json
+
+```{
+
   "success": true,
-  "city": "İstanbul",
-  "date": "01.09.2025",
-  "prayerTimes": {
-    "imsak": "04:52",
-    "güneş": "06:24", 
-    "öğle": "13:01",
+
+### Python  "city": "İstanbul",
+
+```python  "date": "01.09.2025",
+
+import requests  "prayerTimes": {
+
+data = requests.get('http://localhost:3001/prayer-times/istanbul').json()    "imsak": "04:52",
+
+print(f"İmsak: {data['prayerTimes']['imsak']}")    "güneş": "06:24", 
+
+```    "öğle": "13:01",
+
     "ikindi": "16:45",
-    "akşam": "19:29",
+
+## 🛠️ Teknolojiler    "akşam": "19:29",
+
     "yatsı": "20:58"
-  },
-  "timestamp": "2025-09-01T10:30:00.000Z"
-}
+
+- Node.js + Express.js  },
+
+- Axios + Cheerio  "timestamp": "2025-09-01T10:30:00.000Z"
+
+- CORS support}
+
 ```
+
+## 📝 Notlar
 
 ### 4. Belirli Tarih İçin Namaz Vakitleri
-```
-GET /prayer-times/:city/:date
+
+- Diyanet İşleri Başkanlığı resmi verileri```
+
+- 30 dakika cacheGET /prayer-times/:city/:date
+
+- Türkiye saati (UTC+3)```
+
+
+
+---**Örnek:**
+
 ```
 
-**Örnek:**
-```
-GET /prayer-times/9146/2025-09-15
+**Made with ❤️**GET /prayer-times/9146/2025-09-15
+
 ```
 
 ## Mobil Uygulama Entegrasyonu 📱
